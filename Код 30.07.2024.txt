@@ -1,0 +1,507 @@
+
+Private Sub Worksheet_Change(ByVal Target As Range)
+
+  ' Диапазон, для которого будет срабатывать макрос
+  Dim targetRange As Range
+  Dim ITK As String
+  Dim dataSheetName As String
+  Dim rowChangedColNum As Integer
+  Dim deptsStartLetter As String
+  Dim deptsFinishLetter As String
+  Dim deptsRowAdress As String
+  Dim deptsRowRange As Range
+  
+  
+  
+  ITK = ThisWorkbook.Name
+  dataSheetName = "info"
+  checkCellRange = Workbooks(ITK).Worksheets(dataSheetName).Range("J7").Value
+  rowChangedColNum = Workbooks(ITK).Worksheets(dataSheetName).Range("J8").Value
+  deptsStartLetter = Workbooks(ITK).Worksheets(dataSheetName).Range("J9").Value
+  deptsFinishLetter = Workbooks(ITK).Worksheets(dataSheetName).Range("J10").Value
+  
+  Set targetRange = Range(checkCellRange)
+
+  ' Проверяем, является ли изменяемая ячейка в заданном диапазоне
+  If Not Intersect(Target, targetRange) Is Nothing Then
+
+    ' получаем номер строки изменяемой ячейки
+    Dim rowNum As Long
+    rowNum = Target.Row
+    ' Получаем диапазон ячеек для проверки распределения проб по отделам
+    deptsRowAdress = deptsStartLetter & rowNum & ":" & deptsFinishLetter & rowNum
+    'MsgBox deptsRowAdress
+    Set deptsRowRange = Range(deptsRowAdress)
+    ' Проходим по каждому столбцу в диапазоне
+    For i = 1 To deptsRowRange.Columns.Count
+      ' Проверяем, заполнен ли столбец цифрами
+      If Application.WorksheetFunction.CountIf(deptsRowRange.Columns(i), ">0") Then
+        Cells(rowNum, rowChangedColNum + i - 1).Value = 1
+      ' This functionality is temporarly off cause its necesarry to keep in df previously marked depts
+      ' Notwithstanding it has been marked wright or wrongly
+      'Else
+      '  Cells(rowNum, rowChangedColNum + i - 1).Value = ""
+      End If
+    Next i
+    ' Вносим изменения в выбранную строку определенного столбца
+    'Cells(rowNum, rowChangedColNum).Value = 1
+    ' Пример: столбец 5  = E
+
+  End If
+
+End Sub
+
+
+Function GetCode(ByVal rangeToCheck As Range, _
+ByVal codes As Range, ByVal dateValue As Date, _
+ByVal sep As String) As String
+
+  ' Проверяем, что диапазон и коды переданы корректно
+  If rangeToCheck Is Nothing Then
+    GetCode = ""
+    Exit Function
+  End If
+
+  Dim cell As Range
+  Dim codeString As String
+  Dim i As Integer
+  Dim year As String
+  Dim month As String
+  Dim monthYear As String
+  Dim dateMinus As Integer
+  Dim datePlus As Integer
+  Dim ITK As String
+  Dim dataSheetName As String
+  Dim maxProbesNumber As Integer
+  Dim errorResult As String
+  
+  
+  ' Значение по умолчанию для строки кодов (сепаратором)
+  codeString = sep
+  ' Присваиваем дате пустую строку
+  monthYear = ""
+  ' Берем значения для проверки валидности дат поступления (чего?)
+  ITK = ThisWorkbook.Name
+  dataSheetName = "info"
+  dateMinus = Workbooks(ITK).Worksheets(dataSheetName).Range("J3").Value
+  datePlus = Workbooks(ITK).Worksheets(dataSheetName).Range("J4").Value
+  maxProbesNumber = Workbooks(ITK).Worksheets(dataSheetName).Range("J5").Value
+  errorResult = Workbooks(ITK).Worksheets(dataSheetName).Range("J6").Value
+
+  ' Проходим по каждому столбцу в диапазоне
+  For i = 1 To rangeToCheck.Columns.Count
+    ' Проверяем, заполнен ли столбец цифрами и не равен ли 0
+    If Application.WorksheetFunction.CountIf(rangeToCheck.Columns(i), ">0") > 0 And rangeToCheck.Columns(i) < maxProbesNumber Then
+      ' Добавляем код, соответствующий столбцу
+      codeString = codeString & codes.Columns(i) & sep
+    ElseIf Application.WorksheetFunction.CountIf(rangeToCheck.Columns(i), ">0") > 0 And rangeToCheck.Columns(i) >= maxProbesNumber Then
+      MsgBox "Probes number cannot be too big (" & rangeToCheck.Columns(i) & "), i.e. more than <" & maxProbesNumber & "> !!!"
+      GetCode = errorResult
+      Exit Function
+      'GoTo ErrorHandler
+    ElseIf rangeToCheck.Columns(i) < 0 Then
+      MsgBox "Probes number (" & rangeToCheck.Columns(i) & ") cannot be negative, i.e. less than <0> !!!"
+      GetCode = errorResult
+      Exit Function
+      'GoTo ErrorHandler
+    'Else
+      'GetCode = errorResult
+      'Exit Function
+      'GoTo ErrorHandler
+    End If
+  Next i
+
+  On Error GoTo ErrorHandler
+    If dateValue > (Now() - dateMinus) And dateValue < (Now() + datePlus) Then
+      ' Получаем дату в виде строки
+      ' ДОБАВИТЬ ПРОВЕРКУ НА ДАТУ!!!
+      year = Format(dateValue, "yy")
+      month = Format(dateValue, "mm")
+      monthYear = year & sep & month
+    ElseIf dateValue > 100 Then
+      MsgBox "Inputted date (" & dateValue & ") is Wrong! It has to be between <" & (Now() - dateMinus) & "> AND <" & (Now() + datePlus) & ">"
+      GetCode = errorResult
+      Exit Function
+    Else
+      GetCode = errorResult
+      Exit Function
+    End If
+    'Debug.Print monthYear
+    ' Объединяем с датой
+    codeString = codeString & monthYear
+    'Debug.Print codeString
+ErrorHandler:
+  ' Возвращаем строку кодов
+  GetCode = codeString
+  
+
+End Function
+
+
+Function ExtractMonthYear(ByVal dateValue As Date, ByVal sep As String) As String
+
+  ' Извлечение года из значения даты
+  Dim year As String
+  year = Format(dateValue, "yy")
+
+  ' Извлечение месяца из значения даты
+  Dim month As String
+  month = Format(dateValue, "mm")
+
+  ' Создание итоговой строки в формате ГГ-ММ
+  ExtractMonthYear = year & sep & month
+
+End Function
+
+
+Function CheckIfNeedUpdate(ByVal rangeToCheck As Range) As Integer
+
+  ' Проверяем, что диапазон передан корректно
+  If rangeToCheck Is Nothing Then
+    CheckIfNeedUpdate = 0
+    Exit Function
+  End If
+  
+  ' Проходим по каждому столбцу в диапазоне
+  For i = 1 To rangeToCheck.Columns.Count
+    ' Проверяем, заполнен ли столбец цифрами
+    If Application.WorksheetFunction.CountIf(rangeToCheck.Columns(i), ">0") Then
+      CheckIfNeedUpdate = 1
+      Exit Function
+    End If
+  Next i
+  
+  CheckIfNeedUpdate = 0
+
+End Function
+
+
+Sub GetExcelFilePath()
+    'Create and set dialog box as variable
+    Dim dialogBox As FileDialog
+    Set dialogBox = Application.FileDialog(msoFileDialogOpen)
+    
+    'Do not allow multiple files to be selected
+    dialogBox.AllowMultiSelect = False
+    
+    'Set the title of of the DialogBox
+    dialogBox.Title = "Select a file"
+    
+    'Set the default folder to open
+    dialogBox.InitialFileName = ActiveWorkbook.Path
+    
+    'Clear the dialog box filters
+    dialogBox.Filters.Clear
+    
+    'Apply file filters - use ; to separate filters for the same name
+    dialogBox.Filters.Add "Excel workbooks", "*.xlsx;*.xls;*.xlsm"
+    
+    'Show the dialog box and output full file name
+    If dialogBox.Show = -1 Then
+        'ActiveSheet.Range("filePath").Value = dialogBox.SelectedItems(1)
+        ActiveCell.Value = dialogBox.SelectedItems(1)
+    End If
+End Sub
+
+
+Sub Кнопка1_Щелчок()
+
+  Dim deptsNumberDetected As Integer
+  Dim idOPPcolNumber As Integer
+  Dim idDeptColNumber As Integer
+  Dim codeOPPcolNumber As Integer
+  Dim codeDeptColNumber As Integer
+  Dim RGBredWarning As Integer
+  Dim RGBgreenWarning As Integer
+  Dim RGBblueWarning As Integer
+  Dim ITK As String
+  Dim dataSheetName As String
+  Dim passWord As String
+  Dim deptsMainSheetName As String
+  Dim i As Integer
+  Dim ColNumbersToCopy As Variant
+  Dim ColNumbersToPaste As Variant
+  Dim s As String
+  Dim arraysFROMTOLengthsEqual As Boolean
+  Dim arraysDEPTSLengthsEqual As Boolean
+  Dim ArrayFromLen As Integer
+  Dim ArrayToLen As Integer
+  Dim fileNames As Variant
+  Dim needRefreshDataColumnNumbers As Variant
+  Dim probesAmountColumnNumbers As Variant
+  Dim deptsNames As Variant
+  Dim fileNamesLen As Integer
+  Dim needRefreshDataLen As Integer
+  Dim probesAmountLen As Integer
+  Dim deptsNamesLen As Integer
+  Dim currentFileName As String
+  Dim currentNeedRefreshDataColumnNumber As Integer
+  Dim currentProbesAmountColumnNumber As Integer
+  Dim currentDeptName As String
+  Dim filesSuccessfullyProcessed As Integer
+  Dim errorText As String
+  Dim errorLog As String
+  Dim txtFilePath As String
+  
+  
+  
+  ' ДОБАВИТЬ ЕЩЕ ТРИ АРРЭЯ ДЛЯ ИТЕРАЦИИ ПО НИМ (В СООТВЕТСВИИ С ОТДЕЛОМ) ВНУТРИ ТЕЛА ЦИКЛА FOR!!!
+  ' fileNames, needRefreshDataColumnNumbers, probesAmountColumnNumbers
+  ' Три переменных для текущего значения из соответствующего эррея
+  ' currentFileName (String), currentNeedRefreshDataColumnNumber (Integer), currentProbesAmountColumnNumber (Integer)
+  ' Счетчик успешных итераций по файлам (удалось открыть и обновить / отправить в нем данные)
+  ' filesSuccessfullyProcessed (Integer)
+  ' errorLog is a full report string of the errors occerred during macros processing
+  ' it's planned to record TimeStamp + errorLog in a log txt-file in the same directory as main file has been set...
+  ' it's necessary to create function doesFileExits(filePath String) -> Boolean
+  
+  
+  arraysFROMTOLengthsEqual = True
+  arraysDEPTSLengthsEqual = True
+  errorLog = ""
+  
+  ' MAIN INFO
+  ITK = ThisWorkbook.Name
+  dataSheetName = "info"
+  deptsNumberDetected = Workbooks(ITK).Worksheets(dataSheetName).Range("J22").Value
+  passWord = Workbooks(ITK).Worksheets(dataSheetName).Range("J11").Value
+  deptsMainSheetName = Workbooks(ITK).Worksheets(dataSheetName).Range("J20").Value
+  txtFilePath = Workbooks(ITK).Worksheets(dataSheetName).Range("J23").Value
+  ' column numbers
+  idOPPcolNumber = Workbooks(ITK).Worksheets(dataSheetName).Range("K15").Value
+  idDeptColNumber = Workbooks(ITK).Worksheets(dataSheetName).Range("K16").Value
+  codeOPPcolNumber = Workbooks(ITK).Worksheets(dataSheetName).Range("K17").Value
+  codeDeptColNumber = Workbooks(ITK).Worksheets(dataSheetName).Range("K18").Value
+  ' Deprecated function RangeToArray() plz, don't use it!!!
+  'ColNumbersToCopy = RangeToArray(Workbooks(ITK).Worksheets(dataSheetName).Range("K12:U12"))
+  ColNumbersToCopy = Application.Transpose(Workbooks(ITK).Worksheets(dataSheetName).Range("K12:U12"))
+  ColNumbersToCopy = FilterArray(ColNumbersToCopy)
+  ColNumbersToPaste = Application.Transpose(Workbooks(ITK).Worksheets(dataSheetName).Range("K13:U13"))
+  ColNumbersToPaste = FilterArray(ColNumbersToPaste)
+  ' Check whither arrays got lengths are equal?
+  ArrayFromLen = ArrayLen(ColNumbersToCopy)
+  ArrayToLen = ArrayLen(ColNumbersToPaste)
+  If ArrayFromLen <> ArrayToLen Then
+    arraysFROMTOLengthsEqual = False
+    GoTo ErrorHandler
+  End If
+  ' RGB colors for warning in depts files if code is not equal for row
+  RGBredWarning = Workbooks(ITK).Worksheets(dataSheetName).Range("J19").Value
+  RGBgreenWarning = Workbooks(ITK).Worksheets(dataSheetName).Range("K19").Value
+  RGBblueWarning = Workbooks(ITK).Worksheets(dataSheetName).Range("L19").Value
+  ' Other arrays with info about departments
+  fileNames = Application.Transpose(Workbooks(ITK).Worksheets(dataSheetName).Range("K4:U4"))
+  fileNames = FilterArray(fileNames)
+  needRefreshDataColumnNumbers = Application.Transpose(Workbooks(ITK).Worksheets(dataSheetName).Range("K5:U5"))
+  needRefreshDataColumnNumbers = FilterArray(needRefreshDataColumnNumbers)
+  probesAmountColumnNumbers = Application.Transpose(Workbooks(ITK).Worksheets(dataSheetName).Range("K14:U14"))
+  probesAmountColumnNumbers = FilterArray(probesAmountColumnNumbers)
+  deptsNames = Application.Transpose(Workbooks(ITK).Worksheets(dataSheetName).Range("K2:U2"))
+  deptsNames = FilterArray(deptsNames)
+  ' Check whither arrays got lengths are equal?
+  fileNamesLen = ArrayLen(fileNames)
+  needRefreshDataLen = ArrayLen(needRefreshDataColumnNumbers)
+  probesAmountLen = ArrayLen(probesAmountColumnNumbers)
+  deptsNamesLen = ArrayLen(deptsNames)
+  If fileNamesLen <> needRefreshDataLen Or _
+     fileNamesLen <> probesAmountLen Or _
+     fileNamesLen <> deptsNamesLen Or _
+     needRefreshDataLen <> probesAmountLen Or _
+     needRefreshDataLen <> deptsNamesLen Or _
+     probesAmountLen <> deptsNamesLen Then
+    arraysDEPTSLengthsEqual = False
+    GoTo ErrorHandler
+  End If
+  
+  MsgBox deptsNumberDetected & ", " & passWord & ", " & idOPPcolNumber & ", " & idDeptColNumber & ", " & codeOPPcolNumber & ", " & codeDeptColNumber & ", " & deptsMainSheetName
+  MsgBox "RGB: (" & RGBredWarning & ", " & RGBgreenWarning & ", " & RGBblueWarning & ")"
+  'MsgBox ColNumbersToCopy
+  'MsgBox ColNumbersToPaste
+  's = ""
+  'For Each element In ColNumbersToCopy
+  '      s = s & element & ", "
+  '  Next element
+  'MsgBox s
+  
+  For i = 0 To deptsNumberDetected - 1
+    ' Проходимся по всем множествам, относящимся к каждому отделу (...)
+    ' Проверяем существует ли указанный файл, если не существует, то скипаем эту итерацию...
+    ' Если файл существует (в противном случае), то вызываем функцию по отправке данных в отдел...
+    currentFileName = fileNames(i)
+    currentNeedRefreshDataColumnNumber = needRefreshDataColumnNumbers(i)
+    currentProbesAmountColumnNumber = probesAmountColumnNumbers(i)
+    currentDeptName = deptsNames(i)
+    ' Check for file exists or not? If not GoTo IterErrorHandler (UPDATE FUNCTION DOESN'T WORK ON CURRENT ITERATION)!
+    ' USE IF-ELSE STATEMENT INSTEAD OF GOTO KEY WORD!!!
+    If CheckFileExists(currentFileName) Then
+        ' UPDATE (REFRESH) FUNCTION WORKS HERE!
+    
+        MsgBox "Department name: <" & currentDeptName & ">, iteration number = <" & i & ">, filename = <" _
+               & currentFileName & ">, need refresh data columns number = <" _
+               & currentNeedRefreshDataColumnNumber & ">, probes amount for current department columns number" _
+               & currentProbesAmountColumnNumber & ">"
+    Else
+        errorText = "File <" & currentFileName & "> doesn't exist."
+                    
+        MsgBox errorText
+        errorLog = errorLog + errorText + "\n"
+    
+    End If
+  Next i
+  
+  s = "<" & filesSuccessfullyProcessed & "> files have been successfully processed." & "\n"
+  
+  MsgBox s
+    
+ErrorHandler:
+    If arraysFROMTOLengthsEqual <> True Then
+        errorText = "Impossible to send data to departments cause of Col Numbers From (CopyFrom) Has <" _
+                    & ArrayFromLen & "> elements. While one To (CopyTo) has <" & ArrayToLen _
+                    & "> elements. Need to fix it on the sheet <" & dataSheetName & ">!"
+        MsgBox errorText
+        errorLog = errorLog + errorText + "\n"
+    End If
+    
+    If arraysDEPTSLengthsEqual <> True Then
+        errorText = "Impossible to send data to departments cause of Data Errors: " _
+                    & "file names number provided = <" & fileNamesLen & ">. " _
+                    & "departments names number provided = <" & deptsNamesLen & ">. " _
+                    & "need refresh data columns number provided = <" & needRefreshDataLen & ">. " _
+                    & "probes amount data columns number provided = <" & probesAmountLen & ">. "
+                    
+        MsgBox errorText
+        errorLog = errorLog + errorText + "\n"
+    End If
+    
+    errorLog = errorLog + s
+    SaveStringToFile(txtFilePath, errorLog)
+    
+    
+End Sub
+
+
+Function GetDeptsNumber(диапазон1 As Range, диапазон2 As Range, диапазон3 As Range, диапазон4 As Range) As Integer
+
+    Dim i As Long
+    Dim count1 As Long, count2 As Long, count3 As Long, count4 As Long
+    Dim continuousCount As Long
+
+    ' Проверка количества ячеек в диапазонах
+    'MsgBox диапазон1.Cells.Count & ", " & диапазон2.Cells.Count & ", " & диапазон3.Cells.Count & ", " & диапазон4.Cells.Count
+    If диапазон1.Cells.Count <> диапазон2.Cells.Count Or диапазон1.Cells.Count <> диапазон3.Cells.Count Or диапазон1.Cells.Count <> диапазон4.Cells.Count Then
+        GetDeptsNumber = -1
+        Exit Function
+        'GoTo finish
+    End If
+
+    ' Подсчет ячеек, удовлетворяющих условию в каждом диапазоне
+    For i = 1 To диапазон1.Cells.Count
+        If диапазон1.Cells(i).Value > 0 Then count1 = count1 + 1
+        If диапазон2.Cells(i).Value > 0 Then count2 = count2 + 1
+        If диапазон3.Cells(i).Value > 0 Then count3 = count3 + 1
+        If диапазон4.Cells(i).Value > 0 Then count4 = count4 + 1
+
+        ' Подсчет непрерывных ячеек с самого начала
+        If диапазон1.Cells(i).Value > 0 And диапазон2.Cells(i).Value > 0 And диапазон3.Cells(i).Value > 0 And диапазон4.Cells(i).Value > 0 And _
+           диапазон1.Cells(i).Value <> "" And диапазон2.Cells(i).Value <> "" And диапазон3.Cells(i).Value <> "" And диапазон4.Cells(i).Value <> "" Then
+            continuousCount = continuousCount + 1
+        Else
+            GetDeptsNumber = continuousCount
+            Exit Function
+            'continuousCount = 0
+        End If
+        'MsgBox count1 & ", " & count2 & ", " & count3 & ", " & count4
+        'MsgBox continuousCount
+    Next i
+
+    ' Проверка равенства количества ячеек, удовлетворяющих условию
+    If count1 = count2 And count1 = count3 And count1 = count4 Then
+        GetDeptsNumber = continuousCount
+    Else
+        GetDeptsNumber = -1
+    End If
+'finish:
+End Function
+
+
+Public Function RangeToArray(inputRange As Range) As Variant()
+Dim size As Integer
+Dim inputValue As Variant, outputArray() As Variant
+
+    ' inputValue will either be an variant array for ranges with more than 1 cell
+    ' or a single variant value for range will only 1 cell
+    inputValue = inputRange
+
+    On Error Resume Next
+    size = UBound(inputValue)
+
+    If Err.Number = 0 Then
+        RangeToArray = inputValue
+    Else
+        On Error GoTo 0
+        ReDim outputArray(1 To 1, 1 To 1)
+        outputArray(1, 1) = inputValue
+        RangeToArray = outputArray
+    End If
+
+    On Error GoTo 0
+
+End Function
+
+Public Function FilterArray(inputArray As Variant) As Variant()
+Dim outputArray() As Variant
+Dim i As Integer, j As Integer
+    
+    ReDim outputArray(UBound(inputArray))
+    j = 0
+
+    For Each elem In inputArray
+        If elem <> "" Then
+            outputArray(j) = elem
+            j = j + 1
+        End If
+    Next
+    
+    ReDim Preserve outputArray(j - 1)
+    
+    FilterArray = outputArray
+    
+End Function
+
+
+Public Function ArrayLen(arr As Variant) As Integer
+    ArrayLen = UBound(arr) - LBound(arr) + 1
+End Function
+
+
+Public Function CheckFileExists(ByVal filePath As String) As Boolean
+
+    CheckFileExists = Dir(filePath, vbNormal) <> ""
+
+End Function
+
+
+Public Function SaveStringToFile(ByVal filePath As String, ByVal textLine As String) As Integer
+
+    On Error GoTo ErrorHandler
+    
+    If Dir(filePath, vbNormal) = "" Then
+        Open filePath For Output As #1
+        Close #1
+    End If
+
+    Open filePath For Append As #1
+
+
+    Print #1, textLine
+
+
+    Close #1
+    SaveStringToFile = 1
+    Exit Function
+    
+ErrorHandler:
+    SaveStringToFile = 0
+    MsgBox "Ошибка при записи в файл: " & Err.Description
+
+End Function
